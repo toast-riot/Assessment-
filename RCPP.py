@@ -1,7 +1,6 @@
 import cv2
 import mediapipe as mp
-import random
-import time
+import math
 
 # Initialize Mediapipe Hand solutions
 mp_hands = mp.solutions.hands
@@ -9,7 +8,17 @@ hands = mp_hands.Hands(min_detection_confidence=0.8, min_tracking_confidence=0.8
 mp_drawing = mp.solutions.drawing_utils
 
 
+def calculate_distance(point1, point2):
+    return ((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2) ** 0.5
+
 def recognize_hand_gesture(landmarks):
+    fingers = [
+        [1, 2, 3, 4],
+        [5, 6, 7, 8],
+        [9, 10, 11, 12],
+        [13, 14, 15, 16],
+        [17, 18, 19, 20]
+    ]
     thumb_tip = landmarks[4]
     thumb_base = landmarks[1]
     index_tip = landmarks[8]
@@ -20,54 +29,31 @@ def recognize_hand_gesture(landmarks):
     ring_base = landmarks[13]
     pinky_tip = landmarks[20]
     pinky_base = landmarks[17]
+    wrist = landmarks[0]
 
-    thumb_up = (thumb_tip.y < thumb_base.y and abs(thumb_tip.x - thumb_base.x) < 0.1)
-    fingers_folding = (index_tip.y > index_base.y and middle_tip.y > middle_base.y and
-                       ring_tip.y > ring_base.y and pinky_tip.y > pinky_base.y)
+    pointer_length = calculate_distance(landmarks[5], landmarks[6]) + calculate_distance(landmarks[6], landmarks[7]) + calculate_distance(landmarks[7], landmarks[8])
+    palm_size = calculate_distance(landmarks[0], landmarks[5])
+    pointer_dist = calculate_distance(index_tip, index_base)
+    pointer_curl = pointer_length / pointer_dist
 
-    if thumb_up and fingers_folding:
-        return "Thumb-Up"
+    min_curl = 0.95
+    max_curl = 20
 
-    if not thumb_up and fingers_folding:
-        return "Rock"
-    elif thumb_up and not fingers_folding:
-        return "Paper"
-    elif index_tip.y < index_base.y and middle_tip.y < middle_base.y and ring_tip.y > ring_base.y and pinky_tip.y > pinky_base.y and thumb_tip.y < thumb_base.y:
-        return "Scissors"
-    elif index_tip.y > index_base.y and middle_tip.y < middle_base.y and ring_tip.y > ring_base.y and pinky_tip.y > pinky_base.y:
-        return "THE FINGER"
+    pointer_curl_percentage = (math.log(pointer_curl) - math.log(min_curl)) / (math.log(max_curl) - math.log(min_curl)) * 100
+    pointer_curl_percentage = max(0, min(pointer_curl_percentage, 100))
 
-    return "None"
+    return [
+        f'Palmsize: {palm_size}',
+        f'Pointer dist: {pointer_dist}',
+        f'Pointer_curl: {pointer_curl}',
+        f'Pointer_curl_percentage: {pointer_curl_percentage}'
+    ]
 
-
-def determine_winner(player_choice, computer_choice):
-    if player_choice == computer_choice:
-        return "It's a tie!"
-
-    # Special case for "THE FINGER"
-    if player_choice == "THE FINGER" and computer_choice in ["Rock", "Paper", "Scissors"]:
-        return "You Win!"
-
-    # Normal win conditions
-    if (player_choice == "Rock" and computer_choice == "Scissors") or \
-            (player_choice == "Paper" and computer_choice == "Rock") or \
-            (player_choice == "Scissors" and computer_choice == "Paper"):
-        return "You win!"
-
-    # Default case: Computer wins
-    return "Computer wins!"
 
 
 cap = cv2.VideoCapture(0)
 cv2.namedWindow("Rock, Paper, Scissors Game", cv2.WINDOW_NORMAL)
 cv2.setWindowProperty("Rock, Paper, Scissors Game", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
-state = "waiting_for_start"  # Game state
-countdown = 4
-start_time = None
-player_choice = None
-computer_choice = None
-result_message = None
 
 while True:
     ret, frame = cap.read()
@@ -82,54 +68,13 @@ while True:
         for landmarks in result.multi_hand_landmarks:
             mp_drawing.draw_landmarks(frame, landmarks, mp_hands.HAND_CONNECTIONS)
 
-    if state == "waiting_for_start":
-        cv2.putText(frame, "Press Thumb-Up to Start", (frame.shape[1] // 2 - 150, frame.shape[0] // 2),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-
-        if result.multi_hand_landmarks:
+    if result.multi_hand_landmarks:
             for landmarks in result.multi_hand_landmarks:
-                gesture = recognize_hand_gesture(landmarks.landmark)
-                if gesture == "Thumb-Up":
-                    state = "countdown"
-                    countdown = 4
-                    start_time = None
-                    computer_choice = random.choice(["Rock", "Paper", "Scissors"])
-                    result_message = None
-                    player_choice = None
+                info = recognize_hand_gesture(landmarks.landmark)
 
-    elif state == "countdown":
-        if start_time is None:
-            start_time = time.time()
+                for i, data in zip(range(len(info)), info):
+                    cv2.putText(frame, data, (10, 25*(i+1)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 1, cv2.LINE_AA)
 
-        elapsed_time = time.time() - start_time
-        time_left = int(countdown - elapsed_time)
-
-        if time_left > 0:
-            cv2.putText(frame, f'{time_left}...', (frame.shape[1] // 2 - 50, frame.shape[0] // 2),
-                        cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 255), 5, cv2.LINE_AA)
-        else:
-            state = "gesture_recognition"
-
-    elif state == "gesture_recognition":
-        if result.multi_hand_landmarks:
-            for landmarks in result.multi_hand_landmarks:
-                player_choice = recognize_hand_gesture(landmarks.landmark)
-
-            if player_choice != "None":
-                result_message = determine_winner(player_choice, computer_choice)
-                state = "show_result"
-
-    elif state == "show_result":
-        cv2.putText(frame, f'Player: {player_choice}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2,
-                    cv2.LINE_AA)
-        cv2.putText(frame, f'Computer: {computer_choice}', (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2,
-                    cv2.LINE_AA)
-        cv2.putText(frame, result_message, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-        cv2.putText(frame, "Press SPACE to Restart", (10, 190), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2,
-                    cv2.LINE_AA)
-
-        if cv2.waitKey(1) & 0xFF == ord(' '):  # Space bar pressed
-            state = "waiting_for_start"
 
     cv2.imshow("Rock, Paper, Scissors Game", frame)
 
