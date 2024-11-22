@@ -19,35 +19,82 @@ def recognize_hand_gesture(landmarks):
         [13, 14, 15, 16],
         [17, 18, 19, 20]
     ]
+
+    finger_threstholds = [
+        [1.05, 20.0],
+        [1.05, 20.0],
+        [1.05, 20.0],
+        [1.05, 20.0],
+        [1.05, 20.0]
+    ]
+
+
     thumb_tip = landmarks[4]
     thumb_base = landmarks[1]
-    index_tip = landmarks[8]
-    index_base = landmarks[5]
-    middle_tip = landmarks[12]
-    middle_base = landmarks[9]
-    ring_tip = landmarks[16]
-    ring_base = landmarks[13]
-    pinky_tip = landmarks[20]
-    pinky_base = landmarks[17]
     wrist = landmarks[0]
 
-    pointer_length = calculate_distance(landmarks[5], landmarks[6]) + calculate_distance(landmarks[6], landmarks[7]) + calculate_distance(landmarks[7], landmarks[8])
-    palm_size = calculate_distance(landmarks[0], landmarks[5])
-    pointer_dist = calculate_distance(index_tip, index_base)
-    pointer_curl = pointer_length / pointer_dist
 
-    min_curl = 0.95
-    max_curl = 20
+    # METHOD 1
+    finger_curl_percentages = []
 
-    pointer_curl_percentage = (math.log(pointer_curl) - math.log(min_curl)) / (math.log(max_curl) - math.log(min_curl)) * 100
-    pointer_curl_percentage = max(0, min(pointer_curl_percentage, 100))
+    for finger in fingers:
+        base = landmarks[finger[0]]
+        tip = landmarks[finger[-1]]
+
+        finger_length = sum(calculate_distance(landmarks[finger[i]], landmarks[finger[i+1]]) for i in range(len(finger) - 1))
+        finger_dist = calculate_distance(tip, base)
+        finger_curl = finger_length / finger_dist
+        # finger_curl_percentage = (finger_length - finger_dist) / finger_dist
+
+        min_curl, max_curl = finger_threstholds[fingers.index(finger)]
+
+        finger_curl_percentage = (math.log(finger_curl) - math.log(min_curl)) / (math.log(max_curl) - math.log(min_curl)) * 100
+        finger_curl_percentage = max(0, min(finger_curl_percentage, 100))
+
+        finger_curl_percentages.append(finger_curl_percentage)
+
+    # return [
+    #     f"Thumb: {finger_curl_percentages[0]:.2f}%",
+    #     f"Index: {finger_curl_percentages[1]:.2f}%",
+    #     f"Middle: {finger_curl_percentages[2]:.2f}%",
+    #     f"Ring: {finger_curl_percentages[3]:.2f}%",
+    #     f"Pinky: {finger_curl_percentages[4]:.2f}%"
+    # ]
+
+    threshold = 2.5
 
     return [
-        f'Palmsize: {palm_size}',
-        f'Pointer dist: {pointer_dist}',
-        f'Pointer_curl: {pointer_curl}',
-        f'Pointer_curl_percentage: {pointer_curl_percentage}'
+        f"Thumb: {'True' if finger_curl_percentages[0] > threshold else 'False'}",
+        f"Index: {'True' if finger_curl_percentages[1] > threshold else 'False'}",
+        f"Middle: {'True' if finger_curl_percentages[2] > threshold else 'False'}",
+        f"Ring: {'True' if finger_curl_percentages[3] > threshold else 'False'}",
+        f"Pinky: {'True' if finger_curl_percentages[4] > threshold else 'False'}"
     ]
+
+
+    # METHOD 2 (BROKEN)
+    # finger_curl_checks = []
+
+    # for finger in fingers:
+    #     is_curling = True
+    #     for i in range(len(finger) - 1):
+    #         dist_current = calculate_distance(landmarks[finger[i]], landmarks[finger[i + 1]])
+    #         dist_next = calculate_distance(landmarks[finger[i + 1]], landmarks[finger[i + 2]]) if i + 2 < len(finger) else float('inf')
+
+    #         if dist_next >= dist_current:
+    #             is_curling = False
+    #             break
+
+    #     finger_curl_checks.append(is_curling)
+
+    # return [
+    #     f"Thumb: {'Curling' if finger_curl_checks[0] else 'Not Curling'}",
+    #     f"Index: {'Curling' if finger_curl_checks[1] else 'Not Curling'}",
+    #     f"Middle: {'Curling' if finger_curl_checks[2] else 'Not Curling'}",
+    #     f"Ring: {'Curling' if finger_curl_checks[3] else 'Not Curling'}",
+    #     f"Pinky: {'Curling' if finger_curl_checks[4] else 'Not Curling'}"
+    # ]
+
 
 
 
